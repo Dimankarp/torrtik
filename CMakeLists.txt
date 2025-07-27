@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #Dependencies
-find_package(Boost CONFIG REQUIRED COMPONENTS asio unit_test_framework system)
+find_package(Boost CONFIG REQUIRED COMPONENTS asio beast unit_test_framework system)
 
 
 # Getting sources & includes

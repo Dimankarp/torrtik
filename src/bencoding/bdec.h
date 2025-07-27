@@ -5,7 +5,7 @@
 
 namespace trrt::benc {
 
-/*
+/**
  @brief Parses single bencoded value from stream
 
  @param in The istream to parse value from
