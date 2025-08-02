@@ -1,8 +1,10 @@
 #include <utility>
 namespace trrt {
 
-/*
-@brief A smart pointer with value semantics.
+// NOLINTBEGIN(cppcoreguidelines-owning-memory)
+
+/// A smart pointer with value semantics.
+/**
 
 Analogous to std::unique_ptr but have deep
 copy constructor & operator=. Doesn't take custom
@@ -11,8 +13,6 @@ deleter.
 operator== also checks for equality deeply, i.e. *ptr_a == *ptr_b;
 
 */
-
-// NOLINTBEGIN(cppcoreguidelines-owning-memory)
 template <typename T> class deep_ptr {
     T* ptr = nullptr;
 
@@ -51,7 +51,9 @@ template <typename T> class deep_ptr {
     T* operator->() const noexcept { return ptr; }
 
     bool operator==(const deep_ptr<T>& other) const {
-        return *ptr == *other.ptr;
+        if(other.ptr != nullptr && this->ptr != nullptr)
+            return *ptr == *other.ptr;
+        return other.ptr == nullptr && this->ptr == nullptr;
     }
 };
 // NOLINTEND(cppcoreguidelines-owning-memory)

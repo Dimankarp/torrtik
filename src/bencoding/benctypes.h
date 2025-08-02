@@ -39,8 +39,13 @@ struct BencList {
 struct BencDict {
     std::unordered_map<std::string, trrt::deep_ptr<BencVal>> val;
     bool operator==(const BencDict& other) const = default;
-    trrt::deep_ptr<BencVal>& at(const std::string& key) { return val.at(key); }
-    const trrt::deep_ptr<BencVal>& at(const std::string& key) const {
+    trrt::deep_ptr<BencVal>& at(const std::string& key) & {
+        return val.at(key);
+    }
+    trrt::deep_ptr<BencVal>&& at(const std::string& key) && {
+        return std::move(val.at(key));
+    }
+    const trrt::deep_ptr<BencVal>& at(const std::string& key) const& {
         return val.at(key);
     }
 };
@@ -51,9 +56,10 @@ struct BencVal : public std::variant<BencInt, BencString, BencList, BencDict> {
 
     /**
       \defgroup BencGetFuncs Quick std::get(...) for BencVals
+
+      @throw std::bad_variant_access same as in std::get
       @{
      */
-
 
     BencInt& get_int() { return std::get<BencInt>(*this); }
 
@@ -73,10 +79,10 @@ struct BencVal : public std::variant<BencInt, BencString, BencList, BencDict> {
     /** @} */
 };
 
+/// Prints human-readable representation of BencVal.
 /**
-@brief Prints human-readable representation of BencVal tree in [out]
+    @param position Starting identation in tabs.
 */
-
 void print_human_readable(const BencVal& val, std::ostream& out, int position = 0);
 
 

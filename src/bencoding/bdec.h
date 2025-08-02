@@ -5,11 +5,10 @@
 
 namespace trrt::benc {
 
+/// Parses single bencoded value from stream
 /**
- @brief Parses single bencoded value from stream
-
  @param in The istream to parse value from
- @return BencVal parsed value
+ @return parsed BencVal
  @throw std::runtime_error if fails to parse value
 */
 BencVal parse_bencoding(std::istream& in);

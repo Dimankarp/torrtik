@@ -4,9 +4,8 @@
 
 namespace trrt::benc {
 
+/// Encodes @ref val with bencoding
 /**
- @brief Encodes @ref val with bencoding
-
  @param val any BencVal object
  @return string containing encoded value
 */
