@@ -1,7 +1,6 @@
 
 #include "bencoding/benc.h"
 #define BOOST_TEST_MODULE BenEncoding
-#include "bencoding/bdec.h"
 #include "bencoding/benctypes.h"
 #include <boost/test/included/unit_test.hpp>
 

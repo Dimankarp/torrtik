@@ -1,20 +1,27 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(Torrtik CXX)
+project(Torrtik LANGUAGES CXX VERSION 0.0.1)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-#Dependencies
+# Conan Dependencies
 find_package(Boost CONFIG REQUIRED COMPONENTS asio beast unit_test_framework system)
 
+# System Dependencies
+# Maybe update conan to include it separately as system req
+find_package(OpenSSL REQUIRED)
+
+# Config files
+
+configure_file(config/trrtconfig.h.in trrtconfig.h)
 
 # Getting sources & includes
-
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/app
+    ${PROJECT_BINARY_DIR}
 )
 
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -24,13 +31,14 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/app
 add_library(torrtik_lib STATIC
     ${LIB_SOURCES}
 )
+target_link_libraries(torrtik_lib PRIVATE  PUBLIC OpenSSL::Crypto  Boost::system)
 
 
 # Create executable
 add_executable(torrtik
     ${APP_SOURCES}
 )
-target_link_libraries(torrtik PRIVATE Boost::system torrtik_lib)
+target_link_libraries(torrtik PRIVATE torrtik_lib)
 
 
 # Testing
