@@ -19,9 +19,11 @@ struct BencInt {
     BencInt(int64_t num) : val{ num } {}
 
     auto operator<=>(const BencInt& other) const = default;
+    operator int64_t() const { return val; }
 };
 
 struct BencString {
+
     std::string val;
     BencString(std::string str) : val{ std::move(str) } {}
     BencString(const char* str) : val{ str } {}
@@ -29,15 +31,20 @@ struct BencString {
     auto operator<=>(const BencString& other) const = default;
 };
 
-
 struct BencList {
     std::vector<BencVal> val;
 
     bool operator==(const BencList& other) const = default;
 };
+// TODO(dimankarp): Think of whether private inheritance would be the same but more concise
 
 struct BencDict {
+
     std::unordered_map<std::string, trrt::deep_ptr<BencVal>> val;
+
+    using ConstIterator =
+    std::unordered_map<std::string, trrt::deep_ptr<BencVal>>::const_iterator;
+
     bool operator==(const BencDict& other) const = default;
     trrt::deep_ptr<BencVal>& at(const std::string& key) & {
         return val.at(key);
@@ -48,6 +55,10 @@ struct BencDict {
     const trrt::deep_ptr<BencVal>& at(const std::string& key) const& {
         return val.at(key);
     }
+
+    ConstIterator find(const std::string& key) const { return val.find(key); }
+    ConstIterator begin() const { return val.begin(); }
+    ConstIterator end() const { return val.end(); }
 };
 
 

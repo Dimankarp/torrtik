@@ -1,9 +1,12 @@
 
+#include "bencoding/benctypes.h"
+#include "utils/hashing.h"
 #include <array>
+#include <expected>
 #include <filesystem>
-#include <memory>
 #include <string>
 #include <vector>
+
 namespace trrt {
 
 struct FileMeta {
@@ -13,15 +16,20 @@ struct FileMeta {
 
 
 struct Metainfo {
-    private:
-    const static int HASH_SIZE = 20;
-
-    public:
     std::string announce;
     std::size_t piece_length;
-    std::vector<std::array<unsigned char, HASH_SIZE>> pieces;
-    std::unique_ptr<std::array<unsigned char, HASH_SIZE>> info_hash;
+    std::vector<sha1_hash_t> pieces;
+    sha1_hash_t info_hash;
     std::vector<FileMeta> files;
 };
+
+/// Extracts Metainfo from bencoded metainfo (i.e. *.torrent file) &
+/// calculates info_hash
+/**
+
+    @throws std::runtime_error on failure
+
+*/
+Metainfo extract_metainfo(benc::BencDict benc);
 
 } // namespace trrt

@@ -16,7 +16,7 @@ namespace trrt::serial {
 
  */
 template <std::integral T, std::input_iterator InIt>
-inline T read_netend_impl(InIt& start) {
+inline T read_netord_impl(InIt& start) {
     static const int BITS_IN_BYTE = 8;
     T value = 0;
     for(int i = 0; i < static_cast<int>(sizeof(T)); ++i) {
@@ -28,12 +28,12 @@ inline T read_netend_impl(InIt& start) {
 }
 
 template <typename InIt> uint8_t read_uint8(InIt& start) {
-    return read_impl<uint8_t>(start);
+    return read_netord_impl<uint8_t>(start);
 }
 
 
 template <typename InIt> uint16_t read_uint16(InIt& start) {
-    return read_impl<uint16_t>(start);
+    return read_netord_impl<uint16_t>(start);
 }
 
 
