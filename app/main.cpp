@@ -1,9 +1,9 @@
 
 #include "bencoding/bdec.h"
-#include "bencoding/benc.h"
 #include "bencoding/benctypes.h"
-#include "trrtconfig.h"
-#include <algorithm>
+#include "metainfo.h"
+#include "peer.h"
+#include "tracker.h"
 #include <boost/asio.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/io_context.hpp>
@@ -13,16 +13,11 @@
 #include <boost/beast/http/message_fwd.hpp>
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/http/verb.hpp>
-#include <cctype>
-#include <concepts>
 #include <fstream>
-#include <iomanip>
-#include <ios>
 #include <iostream>
+#include <numeric>
 #include <openssl/evp.h>
 #include <openssl/types.h>
-#include <random>
-#include <sstream>
 
 namespace asio = boost::asio;
 namespace benc = trrt::benc;
@@ -31,95 +26,43 @@ namespace http = beast::http;
 using tcp = asio::ip::tcp;
 
 
-std::string bytes_to_hex(const std::string& bytes) {
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
-    for(unsigned char byte : bytes) {
-        ss << std::setw(2) << static_cast<unsigned int>(byte);
-    }
-    return ss.str();
-}
-
-
-std::string generate_peer_id() {
-    const int MAGIC_PRIME_1 = 7229;
-    const int MAGIC_PRIME_2 = 1759;
-    const int PEER_ID_BYTES = 20;
-    const std::string client_prefix = "TK";
-    const std::string version_str = std::to_string(PROJECT_VERSION_MAJOR) +
-    std::to_string(PROJECT_VERSION_MINOR) + std::to_string(PROJECT_VERSION_PATCH);
-
-    std::random_device rd{};
-    std::linear_congruential_engine<uint16_t, MAGIC_PRIME_1, MAGIC_PRIME_2, 0> lce{
-        static_cast<uint16_t>(rd())
-    };
-    std::string result{};
-
-    result.reserve(PEER_ID_BYTES);
-    result += "-" + client_prefix + version_str + "-";
-    while(result.length() != PEER_ID_BYTES) {
-        result += std::to_string(lce() % 10);
-    }
-    return result;
-}
-
 int main() {
-    asio::io_context io{};
     std::ifstream file("test.torrent");
     if(!file.is_open()) {
         perror("Failed to open file");
         exit(1);
     }
     auto tree = benc::parse_bencoding(file).get_dict();
-
-    auto str = trrt::benc::bencode(tree.at("info")->get_dict());
-    unsigned char hash[20];
-    unsigned int hash_len = 0;
-    // str.val = bytes_to_hex(str.val);
-    trrt::benc::print_human_readable(tree, std::cout);
-
-    const auto filelen =
-    std::to_string(tree.at("info")->get_dict().at("length")->get_int().val);
+    trrt::Metainfo meta = trrt::extract_metainfo(std::move(tree));
 
 
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    EVP_DigestInit_ex(ctx, EVP_sha1(), nullptr);
-    EVP_DigestUpdate(ctx, str.c_str(), str.length());
-    EVP_DigestFinal_ex(ctx, hash, &hash_len);
-    EVP_MD_CTX_free(ctx);
-
-    std::string hash_str(reinterpret_cast<char*>(hash), 0, hash_len);
-    // std::cout << urlencode(hash_str) << "\n
-    auto const peer_id = generate_peer_id();
-    std::cout << peer_id << "\n";
-
-    auto const host = "bt3.t-ru.org"; // tree.at("announce")->get_str().val;
-    std::cout << "Host " << host << "\n";
     asio::io_context ioc{};
     tcp::resolver resolver(ioc);
     beast::tcp_stream stream(ioc);
 
-    auto const results = resolver.resolve(host, "80");
+    auto const results = resolver.resolve(meta.announce.hostname, "80");
+    stream.connect(results);
 
-    // stream.connect(results);
-    // std::vector<std::pair<std::string, std::string>> params = {
-    //     { "info_hash", urlencode(hash_str) },
-    //     { "peer_id", peer_id },
-    //     { "port", "6881" },
-    //     { "uploaded", "0" },
-    //     { "downloaded", "0" },
-    //     { "left", filelen },
-    //     { "compact", "1" },
-    //     { "event", "started" }
-    // };
-    // std::string target = "/ann?";
-    // for(int i = 0; i < params.size(); i++) {
-    //     auto& [key, val] = params[i];
-    //     target += key + "=" + val;
-    //     if(i != params.size() - 1) {
-    //         target += "&";
-    //     }
-    // }
+    auto peer_id = trrt::peer::generate_peer_id();
+
+
+    std::size_t cur_left =
+    std::accumulate(meta.files.begin(), meta.files.end(), 0,
+                    [](const auto& x, const auto& y) { return x + y.length; });
+
+    trrt::http::TrackerRequest tracker_req{ .info_hash = meta.info_hash,
+                                            .peer_id = peer_id,
+                                            .port = 6881,
+                                            .uploaded = 0,
+                                            .downloaded = 0,
+                                            .left = cur_left };
+
+
+    std::string target = meta.announce.query.value_or("") + "?" +
+    trrt::http::tracker_request_to_url_params(tracker_req);
+
+    std::cout << target << "\n";
+
 
     // // target =
     // // "/ann?info_hash=%ec%1f%2f%82%7d%0b%5ep%9b%91%9f%e4w%b5%05%96%1ev%b00&peer_"
@@ -127,19 +70,19 @@ int main() {
     // // "1563609088&corrupt=0&key=7E82539F&event=started&numwant=200&compact=1&no_"
     // // "peer_id=1&supportcrypto=1&redundant=0";
 
-    // http::request<http::string_body> req{ http::verb::get, target, 11 };
-    // req.set(http::field::host, host);
-    // req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    http::request<http::string_body> req{ http::verb::get, target, 11 };
+    req.set(http::field::host, meta.announce.hostname);
+    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
-    // http::write(stream, req);
+    http::write(stream, req);
 
-    // beast::flat_buffer buffer;
-    // http::response<http::string_body> res;
-    // http::read(stream, buffer, res);
-    // // std::cout << res << '\n';
+    beast::flat_buffer buffer;
+    http::response<http::string_body> res;
+    http::read(stream, buffer, res);
+    std::cout << res << '\n';
 
-    // beast::error_code ec;
-    // stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+    beast::error_code ec;
+    stream.socket().shutdown(tcp::socket::shutdown_both, ec);
 
 
     // std::istringstream strstream{ res.body() };

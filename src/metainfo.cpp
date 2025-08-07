@@ -4,7 +4,10 @@
 #include <cstddef>
 #include <filesystem>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 
 namespace trrt {
 
@@ -28,6 +31,41 @@ std::vector<FileMeta> extract_multiple_files(const benc::BencDict& info) {
     }
     return results;
 }
+
+const std::unordered_map<std::string, TrackerProtocol> protocol_by_name = {
+    { "http", TrackerProtocol::HTTP },
+    { "udp", TrackerProtocol::UDP },
+};
+
+TrackerMeta extract_tracker_meta(const std::string& announce) {
+    const std::string SCHEME_DELIM_STR = "://";
+    const std::string QUERY_DELIM_STR = "/";
+    auto scheme_delim = announce.find(SCHEME_DELIM_STR);
+    if(scheme_delim == std::string::npos)
+        throw std::runtime_error{ "Failed to parse tracker announce url - no "
+                                  "scheme delimeter" };
+    std::string scheme = announce.substr(0, scheme_delim);
+    auto hostname_start = scheme_delim + SCHEME_DELIM_STR.size();
+    auto query_delim = announce.find(QUERY_DELIM_STR, hostname_start);
+
+    std::string hostname;
+    std::optional<std::string> query;
+
+    if(query_delim == std::string::npos) {
+        hostname = announce.substr(hostname_start);
+    } else {
+        query = announce.substr(query_delim);
+        hostname = announce.substr(hostname_start, query_delim - hostname_start);
+    }
+
+    auto protocol_it = protocol_by_name.find(scheme);
+    if(protocol_it == protocol_by_name.end()) {
+        throw std::runtime_error{ "Failed to parse scheme " + scheme + " from announce url" };
+    }
+
+    return { .protocol = protocol_it->second, .hostname = hostname, .query = query };
+}
+
 
 } // namespace
 
@@ -59,7 +97,10 @@ Metainfo extract_metainfo(benc::BencDict benc) {
     } else {
         files = extract_multiple_files(info);
     }
-    return { .announce = announce,
+
+    auto tracker_meta = extract_tracker_meta(announce);
+
+    return { .announce = tracker_meta,
              .piece_length = piece_length,
              .pieces = piece_hashes,
              .info_hash = info_hash,

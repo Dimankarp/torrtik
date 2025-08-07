@@ -1,4 +1,5 @@
 
+#pragma once
 #include "bencoding/benctypes.h"
 #include "utils/hashing.h"
 #include <array>
@@ -14,9 +15,16 @@ struct FileMeta {
     std::size_t length;
 };
 
+enum class TrackerProtocol : char { HTTP, UDP };
+
+struct TrackerMeta {
+    TrackerProtocol protocol;
+    std::string hostname;
+    std::optional<std::string> query;
+};
 
 struct Metainfo {
-    std::string announce;
+    TrackerMeta announce;
     std::size_t piece_length;
     std::vector<sha1_hash_t> pieces;
     sha1_hash_t info_hash;

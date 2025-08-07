@@ -1,3 +1,5 @@
+#pragma once
+
 #include "utils/hashing.h"
 #include <array>
 #include <boost/asio/ip/address.hpp>
@@ -9,27 +11,18 @@ namespace trrt::http {
 
 enum class TrackerEvent : char { STARTED = 0, STOPPED, COMPLETED };
 
-namespace {
-
-const std::unordered_map<TrackerEvent, std::string> event_to_name = {
-    { TrackerEvent::STARTED, "started" },
-    { TrackerEvent::STOPPED, "stopped" },
-    { TrackerEvent::COMPLETED, "completed" },
-};
-}
-
 
 struct TrackerRequest {
 
     sha1_hash_t info_hash;
     sha1_hash_t peer_id;
     uint16_t port;
-    std::size_t uploaded;
-    std::size_t downloaded;
+    std::size_t uploaded = 0;
+    std::size_t downloaded = 0;
     std::size_t left;
     // Nailing to compact=1 for now
-    static const bool compact = true;
-    TrackerEvent event;
+    const bool compact = true;
+    TrackerEvent event = TrackerEvent::STARTED;
 };
 
 /// Creates a URL-encoded param list from TrackerRequest
@@ -39,6 +32,9 @@ struct TrackerRequest {
 
 */
 std::string tracker_request_to_url_params(const TrackerRequest& req);
+
+
+
 
 
 struct TrackerFailResponse {
@@ -55,7 +51,6 @@ struct TrackerResponse {
     uint64_t incomplete;
     std::vector<boost::asio::ip::address_v4> peers;
 };
-
 
 
 } // namespace trrt::http
