@@ -14,11 +14,15 @@
 #include <boost/beast/http/message_fwd.hpp>
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/http/verb.hpp>
+#include <cstddef>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <numeric>
 #include <openssl/evp.h>
 #include <openssl/types.h>
+#include <ostream>
+#include <serial/read.h>
 #include <sstream>
 
 namespace asio = boost::asio;
@@ -66,11 +70,8 @@ int main() {
     std::cout << target << "\n";
 
 
-    // // target =
-    // // "/ann?info_hash=%ec%1f%2f%82%7d%0b%5ep%9b%91%9f%e4w%b5%05%96%1ev%b00&peer_"
-    // // "id=-qB4650-QVo*oP.P4Z(*&port=35757&uploaded=0&downloaded=0&left="
-    // // "1563609088&corrupt=0&key=7E82539F&event=started&numwant=200&compact=1&no_"
-    // // "peer_id=1&supportcrypto=1&redundant=0";
+    // target =
+    // "/ann?info_hash=%EC%1F%2F%82%7D%0B%5Ep%9B%91%9F%E4w%B5%05%96%1Ev%B00&peer_id=-TK002-1410301630145&port=6881&uploaded=0&downloaded=0&left=1563609088&compact=1&event=started";
 
     http::request<http::string_body> req{ http::verb::get, target, 11 };
     req.set(http::field::host, meta.announce.hostname);
@@ -82,35 +83,81 @@ int main() {
     http::response<http::string_body> res;
     http::read(stream, buffer, res);
 
+    std::cout << res << "\n";
+
     auto str_stream = std::istringstream{ res.body() };
     std::expected<trrt::http::TrackerResponse, trrt::http::TrackerFailResponse> response =
     trrt::http::extract_tracker_response(trrt::benc::parse_bencoding(str_stream).get_dict());
 
     if(response.has_value()) {
-        auto& value = response.value();
-        value.tracker_id.and_then([](auto& x) {
-            std::cout << x << "\n";
-            return std::optional<int>{};
-        });
-
     } else {
         std::cout << response.error().reason << "\n";
+        std::exit(1);
     }
 
+    auto valid_response = response.value();
     beast::error_code ec;
     stream.socket().shutdown(tcp::socket::shutdown_both, ec);
 
 
-    std::string buf;
-    buf.resize(1024);
-
-
+    std::vector<char> buf;
     trrt::message::HandshakeMsg msg{ .info_hash = meta.info_hash, .peer_id = peer_id };
-    char* ptr = buf.data();
+    auto inserter = std::back_inserter(buf);
+    trrt::message::serialize_msg(msg, inserter);
 
-    trrt::message::serialize_msg(msg, ptr);
 
-    std::cout << buf << "\n";
+    tcp::socket socket{ (ioc) };
+    valid_response.peers.emplace_back(boost::asio::ip::make_address_v4(
+                                      "188.126.44.173"),
+                                      57420);
+
+    for(;;) {
+
+
+        std::cout << "Connecting to" << valid_response.peers.back() << std::endl;
+        try {
+
+            tcp::socket temp_socket(ioc);
+            struct timeval timeout;
+            timeout.tv_sec = 5;
+            timeout.tv_usec = 0;
+
+            // This requires accessing the native socket
+            temp_socket.open(tcp::v4());
+            ::setsockopt(temp_socket.native_handle(), SOL_SOCKET, SO_SNDTIMEO,
+                         &timeout, sizeof(timeout));
+
+            temp_socket.connect(valid_response.peers.back());
+            socket = std::move(temp_socket);
+            break;
+        } catch(...) {
+            socket.close();
+            valid_response.peers.pop_back();
+        }
+    }
+    std::cout << "Sending to" << valid_response.peers.back();
+    socket.send(asio::buffer(buf));
+    std::cout << "Receiving from" << valid_response.peers.back();
+    std::vector<char> recv_buf(1024);
+    int received = 0;
+
+    socket.async_receive(asio::buffer(recv_buf), [&](auto e, auto sz) {
+        received += sz;
+        std::cout << e << "\n";
+        std::cout << "Received " << received << "\n";
+        std::cout << std::string{ recv_buf.data() };
+        char* ptr = recv_buf.data();
+        std::size_t ptrsz = trrt::serial::read_uint8(ptr);
+        if(ptrsz + 8 + trrt::message::HandshakeMsg::FIXED_SZ >= received) {
+            std::cout << "Received all \n";
+            socket.close();
+        } else {
+            std::cout << "didnt receive all\n";
+            socket.close();
+        }
+    });
+
+    ioc.run();
 
 
     // std::istringstream strstream{ res.body() };

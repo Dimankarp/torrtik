@@ -45,6 +45,10 @@ template <typename OutIt> void write_uint32(uint32_t val, OutIt& start) {
     write_netord_impl<uint32_t>(val, start);
 }
 
+template <typename OutIt> void write_uint64(uint64_t val, OutIt& start) {
+    write_netord_impl<uint64_t>(val, start);
+}
+
 template <RangeOfIntegral R, typename OutIt>
 void write_range(const R range, OutIt& start) {
     std::ranges::for_each(range, [&](auto x) {
