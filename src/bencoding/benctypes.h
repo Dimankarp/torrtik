@@ -4,6 +4,7 @@
 #include "utils/pointers.h"
 #include <cstdint>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -47,13 +48,25 @@ struct BencDict {
 
     bool operator==(const BencDict& other) const = default;
     trrt::deep_ptr<BencVal>& at(const std::string& key) & {
-        return val.at(key);
+        try {
+            return val.at(key);
+        } catch(std::out_of_range& e) {
+            throw std::out_of_range{ std::string(e.what()) + " key: " + key };
+        }
     }
     trrt::deep_ptr<BencVal>&& at(const std::string& key) && {
-        return std::move(val.at(key));
+        try {
+            return std::move(val.at(key));
+        } catch(std::out_of_range& e) {
+            throw std::out_of_range{ std::string(e.what()) + " key: " + key };
+        }
     }
     const trrt::deep_ptr<BencVal>& at(const std::string& key) const& {
-        return val.at(key);
+        try {
+            return val.at(key);
+        } catch(std::out_of_range& e) {
+            throw std::out_of_range{ std::string(e.what()) + " key: " + key };
+        }
     }
 
     ConstIterator find(const std::string& key) const { return val.find(key); }

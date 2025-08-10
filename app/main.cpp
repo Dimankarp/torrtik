@@ -1,6 +1,7 @@
 
 #include "bencoding/bdec.h"
 #include "bencoding/benctypes.h"
+#include "message.h"
 #include "metainfo.h"
 #include "peer.h"
 #include "tracker.h"
@@ -18,6 +19,7 @@
 #include <numeric>
 #include <openssl/evp.h>
 #include <openssl/types.h>
+#include <sstream>
 
 namespace asio = boost::asio;
 namespace benc = trrt::benc;
@@ -79,10 +81,36 @@ int main() {
     beast::flat_buffer buffer;
     http::response<http::string_body> res;
     http::read(stream, buffer, res);
-    std::cout << res << '\n';
+
+    auto str_stream = std::istringstream{ res.body() };
+    std::expected<trrt::http::TrackerResponse, trrt::http::TrackerFailResponse> response =
+    trrt::http::extract_tracker_response(trrt::benc::parse_bencoding(str_stream).get_dict());
+
+    if(response.has_value()) {
+        auto& value = response.value();
+        value.tracker_id.and_then([](auto& x) {
+            std::cout << x << "\n";
+            return std::optional<int>{};
+        });
+
+    } else {
+        std::cout << response.error().reason << "\n";
+    }
 
     beast::error_code ec;
     stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+
+
+    std::string buf;
+    buf.resize(1024);
+
+
+    trrt::message::HandshakeMsg msg{ .info_hash = meta.info_hash, .peer_id = peer_id };
+    char* ptr = buf.data();
+
+    trrt::message::serialize_msg(msg, ptr);
+
+    std::cout << buf << "\n";
 
 
     // std::istringstream strstream{ res.body() };

@@ -1,9 +1,10 @@
 #pragma once
 
+#include "bencoding/benctypes.h"
 #include "utils/hashing.h"
 #include <array>
-#include <boost/asio/ip/address.hpp>
-#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <expected>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -34,9 +35,6 @@ struct TrackerRequest {
 std::string tracker_request_to_url_params(const TrackerRequest& req);
 
 
-
-
-
 struct TrackerFailResponse {
     std::string reason;
 };
@@ -47,10 +45,14 @@ struct TrackerResponse {
     uint64_t interval;
     std::optional<uint64_t> min_interval;
     std::optional<std::string> tracker_id;
-    uint64_t complete;
-    uint64_t incomplete;
-    std::vector<boost::asio::ip::address_v4> peers;
+    std::optional<uint64_t> complete;
+    std::optional<uint64_t> incomplete;
+    std::vector<boost::asio::ip::tcp::endpoint> peers;
 };
+
+
+std::expected<TrackerResponse, TrackerFailResponse>
+extract_tracker_response(benc::BencDict dict);
 
 
 } // namespace trrt::http

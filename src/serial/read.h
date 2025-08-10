@@ -27,6 +27,18 @@ inline T read_netord_impl(InIt& start) {
     return value;
 }
 
+/// Partial specialization for aoviding UB on opeartion(b << 8) for bytes
+template <std::input_iterator InIt>
+inline std::uint8_t read_netord_impl(InIt& start) {
+    return static_cast<std::uint8_t>(*start++);
+}
+
+template <std::input_iterator InIt>
+inline std::int8_t read_netord_impl(InIt& start) {
+    return static_cast<std::int8_t>(*start++);
+}
+
+
 template <typename InIt> uint8_t read_uint8(InIt& start) {
     return read_netord_impl<uint8_t>(start);
 }
@@ -34,6 +46,10 @@ template <typename InIt> uint8_t read_uint8(InIt& start) {
 
 template <typename InIt> uint16_t read_uint16(InIt& start) {
     return read_netord_impl<uint16_t>(start);
+}
+
+template <typename InIt> uint32_t read_uint32(InIt& start) {
+    return read_netord_impl<uint32_t>(start);
 }
 
 
