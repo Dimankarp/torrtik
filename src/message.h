@@ -16,7 +16,7 @@ struct HandshakeMsg {
     sha1_hash_t info_hash;
     sha1_hash_t peer_id;
 
-    const static std::size_t FIXED_SZ = sizeof(info_hash) + sizeof(peer_id);
+    const static std::size_t FIXED_SZ = sizeof(info_hash) + sizeof(peer_id) + sizeof(std::uint64_t);
 };
 
 

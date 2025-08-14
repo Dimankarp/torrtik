@@ -1,3 +1,6 @@
+#pragma once
+
+#include "utils/concepts.h"
 #include <concepts>
 #include <cstdint>
 #include <iterator>
@@ -44,6 +47,15 @@ template <typename InIt> uint16_t read_uint16(InIt& start) {
 
 template <typename InIt> uint32_t read_uint32(InIt& start) {
     return read_netord_impl<uint32_t>(start);
+}
+
+template <RangeOfIntegral R, typename OutIt>
+void read_range(R& range, OutIt& start) {
+    auto it = range.begin();
+    while(it != range.end()) {
+        *it = read_netord_impl<std::ranges::range_value_t<R>>(start);
+        it++;
+    }
 }
 
 
