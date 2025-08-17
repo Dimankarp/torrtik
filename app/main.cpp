@@ -23,7 +23,6 @@
 #include <numeric>
 #include <openssl/evp.h>
 #include <openssl/types.h>
-#include <ostream>
 #include <serial/read.h>
 #include <sstream>
 
@@ -105,7 +104,7 @@ int main() {
 
     auto manager = std::make_shared<trrt::TorrentManager>(meta, peer_id);
 
-    std::ranges::for_each(valid_response.peers, [&, mng=manager](auto& x) {
+    std::ranges::for_each(valid_response.peers, [&, mng = manager](auto& x) {
         std::cout << "Connecting to " << x << "\n";
         auto conn = trrt::connection::PeerTcpConnection::create(ioc, x, manager);
         conn->start();
