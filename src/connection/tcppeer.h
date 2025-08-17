@@ -1,5 +1,6 @@
 #pragma once
 
+#include "logging/log.h"
 #include "manager.h"
 #include "message.h"
 #include "serial/read.h"
@@ -81,7 +82,7 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
         timer.async_wait([self = shared_from_this()](const auto& ec) {
             if(ec)
                 return;
-            std::cout << "Deadline timer for " << self->endpoint << "\n";
+            trrt::log(meta(LogLevel::WARNING), "Timeout reached for {}", self->endpoint);
             self->socket.cancel();
         });
     }
@@ -90,12 +91,14 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
 
         auto handler = [self = shared_from_this()](const auto& ec) {
             if(ec) {
-                std::cout << "Failed to connect to:" << self->endpoint << " "
-                          << ec.message() << "\n";
+                trrt::log(meta(LogLevel::WARNING), "Failed to connect to {} because of {}",
+                          self->endpoint, ec.message());
                 return;
             }
             self->send_handshake();
         };
+
+        log(meta(), "Connecting to {}", endpoint);
 
         run_with_timeout(
         [this](auto&& h) {
@@ -113,8 +116,8 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
 
         auto handler = [self = shared_from_this()](const auto& ec, auto sz) {
             if(ec) {
-                std::cout << "Failed to write handshake to:" << self->endpoint
-                          << " " << ec.message() << "\n";
+                trrt::log(meta(LogLevel::WARNING), "Failed to write handshake to {} because of {}",
+                          self->endpoint, ec.message());
                 return;
             }
             self->receive_handshake_stage1();
@@ -131,15 +134,16 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
 
         auto handler = [self = shared_from_this()](const auto& ec, auto /*sz*/) {
             if(ec) {
-                std::cout << "Failed receive handshake byte to "
-                          << self->endpoint << " " << ec.message() << "\n";
+                trrt::log(meta(LogLevel::WARNING),
+                          "Failed receive handshake byte from {} because of {}",
+                          self->endpoint, ec.message());
                 return;
             }
             auto it = asio::buffers_begin(self->buf.data());
             auto pstrlen = serial::read_uint8(it);
             self->buf.consume(sizeof(std::uint8_t));
-            std::cout << "Received pstrelen" << std::to_string(pstrlen)
-                      << "from " << self->endpoint << "\n";
+            trrt::log(meta(), "Received pstrelen {} from {}",
+                      std::to_string(pstrlen), self->endpoint);
             self->receive_handshake_stage2(pstrlen);
         };
 

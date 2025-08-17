@@ -14,8 +14,13 @@ find_package(Boost CONFIG REQUIRED COMPONENTS asio beast unit_test_framework sys
 find_package(OpenSSL REQUIRED)
 
 # Config files
-
 configure_file(config/trrtconfig.h.in trrtconfig.h)
+
+# Options
+option(TRRT_ENABLE_LOGGING "Enable torrtik library logging" OFF)
+if(TRRT_ENABLE_LOGGING)
+    add_compile_definitions(TRRT_ENABLE_LOGGING)
+endif()
 
 # Getting sources & includes
 include_directories(
