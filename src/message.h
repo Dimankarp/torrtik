@@ -4,8 +4,10 @@
 #include "utils/hashing.h"
 #include <cstddef>
 #include <iterator>
+#include <memory>
 #include <serial/write.h>
 #include <string>
+#include <vector>
 namespace trrt::message {
 
 namespace serial = trrt::serial;
@@ -16,18 +18,70 @@ struct HandshakeMsg {
     sha1_hash_t info_hash;
     sha1_hash_t peer_id;
 
-    const static std::size_t FIXED_SZ = sizeof(info_hash) + sizeof(peer_id) + sizeof(std::uint64_t);
+    const static std::size_t FIXED_SZ =
+    sizeof(info_hash) + sizeof(peer_id) + sizeof(std::uint64_t);
 };
 
 
-template <std::output_iterator<char> OIt>
-void serialize_msg(const HandshakeMsg& msg, OIt& it) {
-    serial::write_uint8(msg.pstr.size(), it);
-    serial::write_range(msg.pstr, it);
-    serial::write_uint64(0x00, it);
-    serial::write_range(msg.info_hash, it);
-    serial::write_range(msg.peer_id, it);
-}
+struct KeepAliveMsg {
+    // empty
+};
+
+
+enum MessageId : char {
+    CHOKE = 0,
+    UNCHOKE = 1,
+    INTERESTED = 2,
+    NOT_INTERESTED = 3,
+    HAVE = 4,
+    BITFIELD = 5,
+    REQUEST = 6,
+    PIECE = 7,
+    CANCEL = 8,
+};
+
+struct ChokeMsg {
+    // empty
+};
+
+struct UnchokeMsg {
+    // empty
+};
+
+struct InterestedMsg {
+    // empty
+};
+
+
+struct NotInterestedMsg {
+    // empty
+};
+
+struct HaveMsg {
+    std::uint32_t piece_index;
+};
+
+struct BitfieldMsg {
+    std::vector<bool> bitfield;
+};
+
+struct RequestMsg {
+    std::uint32_t index;
+    std::uint32_t begin;
+    std::uint32_t length;
+};
+
+struct PieceMsg {
+    std::uint32_t index;
+    std::uint32_t begin;
+    std::span<char> block;
+};
+
+struct CancelMsg {
+    std::uint32_t index;
+    std::uint32_t begin;
+    std::uint32_t length;
+};
 
 
 } // namespace trrt::message

@@ -5,6 +5,7 @@
 #include "manager.h"
 #include "message.h"
 #include "metainfo.h"
+#include "msg_serialize.h"
 #include "peer.h"
 #include "tracker.h"
 #include <boost/asio.hpp>

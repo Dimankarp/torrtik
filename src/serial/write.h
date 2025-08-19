@@ -1,3 +1,5 @@
+#pragma once
+
 #include "utils/concepts.h"
 #include <algorithm>
 #include <concepts>
