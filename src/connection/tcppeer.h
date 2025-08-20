@@ -3,6 +3,7 @@
 #include "logging/log.h"
 #include "manager.h"
 #include "message.h"
+#include "msg_serialize.h"
 #include "serial/read.h"
 #include "utils/hashing.h"
 #include <boost/asio.hpp>
