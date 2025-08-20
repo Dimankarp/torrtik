@@ -22,12 +22,6 @@ struct HandshakeMsg {
     sizeof(info_hash) + sizeof(peer_id) + sizeof(std::uint64_t);
 };
 
-
-struct KeepAliveMsg {
-    // empty
-};
-
-
 enum MessageId : char {
     CHOKE = 0,
     UNCHOKE = 1,
@@ -38,49 +32,60 @@ enum MessageId : char {
     REQUEST = 6,
     PIECE = 7,
     CANCEL = 8,
+    INVALID_ID = 127
 };
 
-struct ChokeMsg {
+struct KeepAliveMsg {
     // empty
+    static const MessageId msg_id = INVALID_ID;
+};
+
+
+struct ChokeMsg {
+    static const MessageId msg_id = CHOKE;
 };
 
 struct UnchokeMsg {
-    // empty
+    static const MessageId msg_id = UNCHOKE;
 };
 
 struct InterestedMsg {
-    // empty
+    static const MessageId msg_id = INTERESTED;
 };
 
-
 struct NotInterestedMsg {
-    // empty
+    static const MessageId msg_id = NOT_INTERESTED;
 };
 
 struct HaveMsg {
     std::uint32_t piece_index;
+    static const MessageId msg_id = HAVE;
 };
 
 struct BitfieldMsg {
     std::vector<bool> bitfield;
+    static const MessageId msg_id = BITFIELD;
 };
 
 struct RequestMsg {
     std::uint32_t index;
     std::uint32_t begin;
     std::uint32_t length;
+    static const MessageId msg_id = REQUEST;
 };
 
 struct PieceMsg {
     std::uint32_t index;
     std::uint32_t begin;
     std::span<char> block;
+    static const MessageId msg_id = PIECE;
 };
 
 struct CancelMsg {
     std::uint32_t index;
     std::uint32_t begin;
     std::uint32_t length;
+    static const MessageId msg_id = CANCEL;
 };
 
 
