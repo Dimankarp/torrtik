@@ -3,28 +3,33 @@
 #include "logging/log.h"
 #include "manager.h"
 #include "message.h"
+#include "msg_deserialize.h"
 #include "msg_serialize.h"
 #include "serial/read.h"
 #include "utils/hashing.h"
+#include "utils/visitor.h"
 #include <boost/asio.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffers_iterator.hpp>
+#include <boost/asio/completion_condition.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/date_time/posix_time/posix_time_config.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
+#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <iterator>
 #include <memory>
 #include <utility>
+#include <variant>
 
 namespace trrt::connection {
 
 using tcp = boost::asio::ip::tcp;
 namespace asio = boost::asio;
-
+namespace msg = message;
 
 namespace {
 template <typename Msg>
@@ -51,9 +56,19 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
     tcp::endpoint endpoint;
     manager_ptr manager;
     asio::streambuf buf;
+    std::vector<bool> bitfield;
+
+    struct {
+        bool am_choking = true;
+        bool am_interested = false;
+        bool peer_choking = true;
+        bool peer_interested = false;
+    } status{};
+
 
     boost::asio::deadline_timer timer;
     bool async_op_completed = false;
+
 
     private:
     PeerTcpConnection(asio::io_context& ctx, tcp::endpoint endp, manager_ptr mngr)
@@ -150,7 +165,7 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
 
         run_with_timeout(
         [this](auto&& h) {
-            asio::async_read(socket, buf, boost::asio::transfer_at_least(1),
+            asio::async_read(socket, buf, boost::asio::transfer_exactly(1),
                              std::forward<decltype(h)>(h));
         },
         handler);
@@ -158,7 +173,7 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
 
     void receive_handshake_stage2(std::uint8_t pstrlen) {
 
-        auto handler = [&, self = shared_from_this()](const auto& ec, auto /*sz*/) {
+        auto handler = [pstrlen, self = shared_from_this()](const auto& ec, auto /*sz*/) {
             // Skipping protocol
             self->buf.consume(pstrlen);
             // Skipping reserved bytes
@@ -169,23 +184,135 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
             auto start = it;
             serial::read_range(info_hash, it);
             serial::read_range(peer_id, it);
-            buf.consume(std::distance(start, it));
+            self->buf.consume(std::distance(start, it));
 
-            std::ranges::for_each(info_hash,
-                                  [](auto x) { std::cout << std::hex << x; });
+            std::ranges::for_each(info_hash, [](auto x) {
+                std::cout << std::hex
+                          << static_cast<unsigned int>(static_cast<unsigned char>(x));
+            });
             std::cout << "\n";
-            std::ranges::for_each(peer_id,
-                                  [](auto x) { std::cout << std::hex << x; });
+            std::ranges::for_each(peer_id, [](auto x) {
+                std::cout << std::hex
+                          << static_cast<unsigned int>(static_cast<unsigned char>(x));
+            });
             std::cout << "\n";
+
+            self->process_msg_start();
         };
 
         run_with_timeout(
         [this, pstrlen](auto&& h) {
             asio::async_read(socket, buf,
-                             boost::asio::transfer_at_least(pstrlen + message::HandshakeMsg::FIXED_SZ),
+                             boost::asio::transfer_exactly(pstrlen + message::HandshakeMsg::FIXED_SZ),
                              std::forward<decltype(h)>(h));
         },
         handler);
     };
+
+    void process_msg_start() {
+
+        auto handler = [self = shared_from_this()](const auto& ec, auto /*sz*/) {
+            if(ec) {
+                trrt::log(meta(LogLevel::WARNING), "Failed to read message length from {}, because of {}",
+                          self->endpoint, ec.message());
+                return;
+            }
+            auto it = asio::buffers_begin(self->buf.data());
+
+            auto msglen = serial::read_uint32(it);
+            log(meta(), "Received msg length of {} from {}", msglen, self->endpoint);
+            self->buf.consume(sizeof(std::uint32_t));
+
+            if(msglen == 0) {
+                log(meta(), "Received KEEPALIVE msg from {}", self->endpoint);
+                self->process_msg_start();
+            } else
+                self->process_msg(msglen);
+        };
+
+        run_with_timeout(
+        [this](auto&& h) {
+            asio::async_read(socket, buf,
+                             boost::asio::transfer_exactly(sizeof(std::uint32_t)),
+                             std::forward<decltype(h)>(h));
+        },
+        handler);
+    }
+
+    void process_msg(std::uint32_t len) {
+
+        auto handler = [len, self = shared_from_this()](const auto& ec, auto sz) {
+            if(ec) {
+                trrt::log(meta(LogLevel::WARNING), "Failed to read message from {}, because of {}",
+                          self->endpoint, ec.message());
+                return;
+            }
+
+            log(meta(), "Received {} when waiting for {} from {}", sz, len, self->endpoint);
+            auto it = asio::buffers_begin(self->buf.data());
+            auto end = it + len;
+
+            auto msg =
+            msg::deserialize<decltype(it), msg::ChokeMsg, msg::UnchokeMsg, msg::InterestedMsg,
+                             msg::NotInterestedMsg, msg::BitfieldMsg>(it, end);
+
+            assert(it == end);
+            self->buf.consume(len);
+
+            const Visitor msg_visitor{
+                [&self](const msg::ChokeMsg&) { self->process_choke_msg(); },
+                [&self](const msg::UnchokeMsg&) { self->process_unchoke_msg(); },
+                [&self](const msg::InterestedMsg&) {
+                    self->process_interested_msg();
+                },
+                [&self](const msg::NotInterestedMsg&) {
+                    self->process_not_interested_msg();
+                },
+                [&self](msg::BitfieldMsg& msg) {
+                    self->process_bitfield_msg(std::move(msg));
+                }
+            };
+
+            std::visit(msg_visitor, msg);
+        };
+
+        run_with_timeout(
+        [len, this](auto&& h) {
+            log(meta(), "Waiting for {} whil in buf {} from {}", len, buf.size(), endpoint);
+            asio::async_read(socket, buf, boost::asio::transfer_exactly(len),
+                             std::forward<decltype(h)>(h));
+        },
+        handler);
+    }
+
+    /** Message processors */
+
+    void process_choke_msg() {
+        log(meta(), "Processing CHOKE from {}", endpoint);
+        status.peer_choking = true;
+        process_msg_start();
+    }
+    void process_unchoke_msg() {
+        log(meta(), "Processing UNCHOKE from {}", endpoint);
+        status.peer_choking = false;
+        process_msg_start();
+    }
+
+    void process_interested_msg() {
+        log(meta(), "Processing INTERESTED from {}", endpoint);
+        status.peer_interested = true;
+        process_msg_start();
+    }
+    void process_not_interested_msg() {
+        log(meta(), "Processing NOT INTERESTED from {}", endpoint);
+        status.peer_interested = false;
+        process_msg_start();
+    }
+
+    void process_bitfield_msg(msg::BitfieldMsg&& msg) {
+        log(meta(), "Processing BITFIELD from {}", endpoint);
+        bitfield = std::move(msg.bitfield);
+        process_msg_start();
+    }
 };
 } // namespace trrt::connection

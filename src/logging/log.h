@@ -40,11 +40,11 @@ struct LogMeta {
 
 constexpr LocLogMeta
 loc_meta(LogLevel level = LogLevel::INFO,
-         const std::source_location loc = std::source_location::current()) {
+         const std::source_location loc = std::source_location::current()) noexcept {
     return LocLogMeta{ .level = level, .loc = loc };
 }
 
-constexpr LogMeta meta(LogLevel level = LogLevel::INFO) {
+constexpr LogMeta meta(LogLevel level = LogLevel::INFO) noexcept {
     return LogMeta{ .level = level };
 }
 

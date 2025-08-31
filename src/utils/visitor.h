@@ -2,7 +2,7 @@
 
 namespace trrt {
 
-template <typename... Base> class Visitor : public Base... {
+template <typename... Base> struct Visitor : public Base... {
     using Base::operator()...;
 };
 
