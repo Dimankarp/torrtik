@@ -143,8 +143,9 @@ template <std::input_iterator InIt> struct PieceMsg {
                         "Not enough bytes to serialize Piece message");
         std::uint32_t index = serial::read_uint32(it);
         std::uint32_t begin = serial::read_uint32(it);
-
-        return PieceMsg{ .index = index, .begin = begin, .buf_begin = it, .buf_end = end };
+        auto buf_begin = it;
+        it = end;
+        return PieceMsg{ .index = index, .begin = begin, .buf_begin = buf_begin, .buf_end = end };
     }
 };
 

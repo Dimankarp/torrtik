@@ -344,8 +344,7 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
                           self->endpoint, ec.message());
                 return;
             }
-            // self->send_receive_msg();
-            self->process_msg_start();
+            self->send_receive_msg();
         };
 
         run_with_timeout(
