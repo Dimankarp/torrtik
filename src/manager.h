@@ -2,6 +2,7 @@
 #include "message.h"
 #include "metainfo.h"
 #include "utils/hashing.h"
+#include <cassert>
 namespace trrt {
 
 
@@ -34,10 +35,27 @@ class TorrentManager {
       _info_hash{ meta.info_hash }, _peer_id{ peer_id },
       pieces_status(pieces_hash.size(), TorrentManager::PieceStatus::NOT_STARTED) {}
 
+    [[nodiscard]]
+    constexpr sha1_hash_t info_hash() noexcept {
+        return _info_hash;
+    }
 
-    sha1_hash_t info_hash() { return _info_hash; }
+    [[nodiscard]]
+    constexpr sha1_hash_t peer_id() noexcept {
+        return _peer_id;
+    }
 
-    sha1_hash_t peer_id() { return _peer_id; }
+    [[nodiscard]]
+    std::size_t reserve_piece(const std::vector<bool>& bitfield) {
+        // assert(bitfield.size() == pieces_status.size());
+        for(std::size_t i = 0; i < pieces_status.size(); i++) {
+            if(pieces_status[i] == PieceStatus::NOT_STARTED && bitfield[i]) {
+                pieces_status[i] = PieceStatus::DOWNLOADING;
+                return i;
+            }
+        }
+        assert(false);
+    }
 };
 
 

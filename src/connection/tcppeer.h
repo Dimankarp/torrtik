@@ -50,7 +50,7 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
     using pointer = std::shared_ptr<PeerTcpConnection>;
     using manager_ptr = std::shared_ptr<TorrentManager>;
     const static std::size_t MAX_BUF_SZ = (1 << 14) + 256; // 16KB max block + 256 for bookkeeping
-    constexpr const static boost::posix_time::time_duration TIMEOUT_SECS{ 0, 0, 15, 0 };
+    constexpr const static boost::posix_time::time_duration TIMEOUT_SECS{ 0, 2, 15, 0 };
 
     tcp::socket socket;
     tcp::endpoint endpoint;
@@ -253,8 +253,8 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
             auto end = it + len;
 
             auto msg =
-            msg::deserialize<decltype(it), msg::ChokeMsg, msg::UnchokeMsg, msg::InterestedMsg,
-                             msg::NotInterestedMsg, msg::BitfieldMsg>(it, end);
+            msg::deserialize<decltype(it), msg::ChokeMsg, msg::UnchokeMsg, msg::InterestedMsg, msg::NotInterestedMsg,
+                             msg::HaveMsg, msg::BitfieldMsg, msg::PieceMsg<decltype(it)>>(it, end);
 
             assert(it == end);
             self->buf.consume(len);
@@ -268,9 +268,18 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
                 [&self](const msg::NotInterestedMsg&) {
                     self->process_not_interested_msg();
                 },
+                [&self](msg::HaveMsg& msg) {
+                    log(meta(), "Received HAVE {} from {}", msg.piece_index,
+                        self->endpoint);
+                    self->process_msg_start();
+                },
                 [&self](msg::BitfieldMsg& msg) {
                     self->process_bitfield_msg(std::move(msg));
+                },
+                [&self](msg::PieceMsg<decltype(it)>& msg) {
+                    self->process_piece_msg(std::move(msg));
                 }
+
             };
 
             std::visit(msg_visitor, msg);
@@ -295,7 +304,7 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
     void process_unchoke_msg() {
         log(meta(), "Processing UNCHOKE from {}", endpoint);
         status.peer_choking = false;
-        process_msg_start();
+        send_interest_msg();
     }
 
     void process_interested_msg() {
@@ -313,6 +322,63 @@ class PeerTcpConnection : public std::enable_shared_from_this<PeerTcpConnection>
         log(meta(), "Processing BITFIELD from {}", endpoint);
         bitfield = std::move(msg.bitfield);
         process_msg_start();
+    }
+    template <std::input_iterator It>
+    void process_piece_msg(msg::PieceMsg<It>&& msg) {
+        log(meta(), "Processing PIECE from {}", endpoint);
+
+        log(meta(), "Received i: {}, off:{} of size {} from {}", msg.index,
+            msg.begin, std::distance(msg.buf_begin, msg.buf_end), endpoint);
+        process_msg_start();
+    }
+
+
+    void send_interest_msg() {
+        log(meta(), "Sending INTERESTED to {}", endpoint);
+        message::InterestedMsg msg{};
+        serialize_into_streambuf(buf, msg);
+
+        auto handler = [self = shared_from_this()](const auto& ec, auto sz) {
+            if(ec) {
+                trrt::log(meta(LogLevel::WARNING), "Failed to write INTERESTED to {} because of {}",
+                          self->endpoint, ec.message());
+                return;
+            }
+            // self->send_receive_msg();
+            self->process_msg_start();
+        };
+
+        run_with_timeout(
+        [this](auto&& h) {
+            asio::async_write(socket, buf, std::forward<decltype(h)>(h));
+        },
+        handler);
+    }
+
+    void send_receive_msg() {
+
+        log(meta(), "Allocating piece for {}", endpoint);
+        auto piece = manager->reserve_piece(bitfield);
+        message::RequestMsg msg{ .index = static_cast<uint32_t>(piece),
+                                 .begin = 0,
+                                 .length = 1 << 10 };
+        log(meta(), "Sending REQUEST for piece {} to {}", piece, endpoint);
+        serialize_into_streambuf(buf, msg);
+
+        auto handler = [self = shared_from_this()](const auto& ec, auto sz) {
+            if(ec) {
+                trrt::log(meta(LogLevel::WARNING), "Failed to write REQUEST to {} because of {}",
+                          self->endpoint, ec.message());
+                return;
+            }
+            self->process_msg_start();
+        };
+
+        run_with_timeout(
+        [this](auto&& h) {
+            asio::async_write(socket, buf, std::forward<decltype(h)>(h));
+        },
+        handler);
     }
 };
 } // namespace trrt::connection

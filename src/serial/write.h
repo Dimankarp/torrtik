@@ -8,7 +8,7 @@
 #include <ranges>
 namespace trrt::serial {
 
-
+//
 /**
 
     Write @ref T value to @ref start iterator
@@ -25,7 +25,7 @@ template <std::integral T, std::output_iterator<char> OutIt>
 inline void write_netord_impl(T value, OutIt& start) {
     static const int BITS_IN_BYTE = 8;
     static const unsigned char BYTE_MASK = 0xff;
-    int shift = sizeof((value)-1) * BITS_IN_BYTE;
+    int shift = (sizeof(value)-1) * BITS_IN_BYTE;
     for(int i = 0; i < static_cast<int>(sizeof(T)); ++i) {
         char b = (value >> shift) & BYTE_MASK;
         *start = b;

@@ -131,20 +131,20 @@ struct RequestMsg {
     }
 };
 
-struct PieceMsg {
+template <std::input_iterator InIt> struct PieceMsg {
     std::uint32_t index;
     std::uint32_t begin;
-    std::span<char> block;
+    InIt buf_begin;
+    InIt buf_end;
     static const MessageId msg_id = PIECE;
 
-    template <std::input_iterator InIt>
     static PieceMsg deserialize_msg(InIt& it, const InIt end) {
         expect_at_least(it, end, sizeof(std::uint32_t) * 2,
                         "Not enough bytes to serialize Piece message");
         std::uint32_t index = serial::read_uint32(it);
         std::uint32_t begin = serial::read_uint32(it);
 
-        return PieceMsg{ .index = index, .begin = begin, .block = std::span<char>(it, end) };
+        return PieceMsg{ .index = index, .begin = begin, .buf_begin = it, .buf_end = end };
     }
 };
 
